@@ -42,7 +42,7 @@ data Type
   | TBool
   | TAddress
   | TMap Type Type
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data Op
   = Add | Sub | Mul

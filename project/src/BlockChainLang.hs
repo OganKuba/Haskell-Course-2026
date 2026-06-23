@@ -2,7 +2,9 @@
 module BlockChainLang
   ( module BlockChainLang.Syntax
   , module BlockChainLang.Parser
+  , module BlockChainLang.Value
   ) where
 
 import BlockChainLang.Parser
 import BlockChainLang.Syntax
+import BlockChainLang.Value
