@@ -1,0 +1,40 @@
+cabal-version:      3.0
+name:               blockchainlang
+version:            0.1.0.0
+synopsis:           A small DSL for smart contracts with a tiny VM and ledger.
+license:            BSD-3-Clause
+author:             Kuba
+maintainer:         kubog123@gmail.com
+build-type:         Simple
+
+common warnings
+  ghc-options: -Wall
+
+library
+  import:           warnings
+  hs-source-dirs:   src
+  default-language: GHC2021
+  exposed-modules:
+    BlockChainLang
+    BlockChainLang.Syntax
+
+  build-depends:
+    , base       >=4.14 && <5
+    , containers
+    , mtl
+    , text
+    , megaparsec
+    , parser-combinators
+
+test-suite blockchainlang-test
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          Main.hs
+  default-language: GHC2021
+  build-depends:
+    , base
+    , blockchainlang
+    , tasty
+    , tasty-hunit
+    , tasty-quickcheck
