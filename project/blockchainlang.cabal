@@ -17,6 +17,7 @@ library
   exposed-modules:
     BlockChainLang
     BlockChainLang.Syntax
+    BlockChainLang.Parser
 
   build-depends:
     , base       >=4.14 && <5
@@ -31,10 +32,13 @@ test-suite blockchainlang-test
   type:             exitcode-stdio-1.0
   hs-source-dirs:   test
   main-is:          Main.hs
+  other-modules:    ParserSpec
   default-language: GHC2021
   build-depends:
     , base
     , blockchainlang
+    , megaparsec
+    , text
     , tasty
     , tasty-hunit
     , tasty-quickcheck
