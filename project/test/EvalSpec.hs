@@ -8,7 +8,7 @@ import Data.Text (Text)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertFailure, testCase, (@?=))
 
-import BlockChainLang.Eval (evalExpr, initStore, runEval)
+import BlockChainLang.Eval (EvalCtx (..), evalExpr, initStore, runEval, runTransaction)
 import BlockChainLang.Syntax
 import BlockChainLang.Value
 
@@ -50,7 +50,60 @@ tests = testGroup "Eval"
             Left (TypeError _) -> pure ()
             other -> assertFailure ("expected TypeError, got " ++ show other)
       ]
+
+  , testGroup "runTransaction"
+      [ testCase "a successful transaction commits its assignments" $
+          runTransaction (txDef [Assign (Var "x") (lit 5)]) ctx0 store0
+            @?= Right (Map.fromList [("x", VInt 5)])
+
+      , testCase "a failed require rolls back earlier assignments" $
+          -- assigns x := 5, then aborts; the result is the error, not a
+          -- store with x == 5, so nothing committed.
+          runTransaction
+            (txDef [Assign (Var "x") (lit 5), Require (Lit (LBool False))])
+            ctx0 store0
+            @?= Left RequireFailed
+
+      , testCase "transfer moves funds between map slots" $
+          runTransaction transferTx transferCtx coinStore
+            @?= Right (Map.fromList
+                  [ ("balances", VMap TInt (Map.fromList
+                      [ (VAddr (Address "alice"), VInt 70)
+                      , (VAddr (Address "bob"),   VInt 30)
+                      ]))
+                  ])
+      ]
   ]
+
+-- runTransaction fixtures ----------------------------------------------------
+
+ctx0 :: EvalCtx
+ctx0 = EvalCtx (Address "alice") Map.empty
+
+store0 :: Store
+store0 = Map.fromList [("x", VInt 0)]
+
+txDef :: [Statement] -> TransactionDef
+txDef body = TransactionDef "t" [] body
+
+-- transfer(to, amount): balances[sender] -= amount; balances[to] += amount
+transferTx :: TransactionDef
+transferTx = TransactionDef "transfer" [("to", TAddress), ("amount", TInt)]
+  [ Require (BinOp Ge balSender (Var "amount"))
+  , Assign balSender (BinOp Sub balSender (Var "amount"))
+  , Assign balTo     (BinOp Add balTo     (Var "amount"))
+  ]
+  where
+    balSender = Index (Var "balances") Sender
+    balTo     = Index (Var "balances") (Var "to")
+
+transferCtx :: EvalCtx
+transferCtx = EvalCtx (Address "alice")
+  (Map.fromList [("to", VAddr (Address "bob")), ("amount", VInt 30)])
+
+coinStore :: Store
+coinStore = Map.fromList
+  [ ("balances", VMap TInt (Map.fromList [(VAddr (Address "alice"), VInt 100)])) ]
 
 -- Helpers --------------------------------------------------------------------
 

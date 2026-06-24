@@ -12,6 +12,8 @@ module BlockChainLang.Eval
   , Eval
   , runEval
   , evalExpr
+  , execStmt
+  , runTransaction
   , initStore
   ) where
 
@@ -69,6 +71,45 @@ evalExpr expr = case expr of
     va <- evalExpr a
     vb <- evalExpr b
     liftEither (applyBinOp op va vb)
+
+-- | Execute a single statement, mutating the store.
+execStmt :: Statement -> Eval ()
+execStmt stmt = case stmt of
+  Require e -> do
+    v <- evalExpr e
+    case v of
+      VBool True  -> pure ()
+      VBool False -> throwError RequireFailed
+      _           -> throwError (TypeError "require expects a bool")
+  Assign lhs rhs -> do
+    v <- evalExpr rhs
+    assign lhs v
+  If cond thn els -> do
+    c <- evalExpr cond
+    case c of
+      VBool True  -> mapM_ execStmt thn
+      VBool False -> mapM_ execStmt els
+      _           -> throwError (TypeError "if condition expects a bool")
+
+-- | Store a value at an l-value: either a plain variable or one map slot.
+assign :: Expr -> Value -> Eval ()
+assign (Var x) v = modify (Map.insert (T.pack x) v)
+assign (Index (Var m) keyExpr) v = do
+  k     <- evalExpr keyExpr
+  store <- get
+  case Map.lookup (T.pack m) store of
+    Just (VMap vt tbl) -> modify (Map.insert (T.pack m) (VMap vt (Map.insert k v tbl)))
+    Just _             -> throwError (TypeError ("`" ++ m ++ "` is not a map"))
+    Nothing            -> throwError (UnboundVar m)
+assign lhs _ = throwError (TypeError ("cannot assign to " ++ show lhs))
+
+-- | Run a transaction body against a store. The whole body runs in
+-- @StateT Store (Either TxError)@, so a 'throwError' (e.g. a failed
+-- 'Require') yields 'Left' and discards every change the body made — the
+-- caller simply keeps the store it passed in. No manual rollback.
+runTransaction :: TransactionDef -> EvalCtx -> Store -> Either TxError Store
+runTransaction txdef ctx store =
+  execStateT (runReaderT (mapM_ execStmt (txBody txdef)) ctx) store
 
 -- | A bare @empty@ takes its type from the surrounding declaration.
 evalInit :: Type -> Expr -> Eval Value
