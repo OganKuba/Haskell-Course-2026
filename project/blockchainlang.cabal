@@ -20,6 +20,7 @@ library
     BlockChainLang.Parser
     BlockChainLang.Value
     BlockChainLang.Eval
+    BlockChainLang.Check
 
   build-depends:
     , base       >=4.14 && <5
@@ -37,6 +38,7 @@ test-suite blockchainlang-test
   other-modules:
     ParserSpec
     EvalSpec
+    CheckSpec
   default-language: GHC2021
   build-depends:
     , base

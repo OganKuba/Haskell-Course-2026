@@ -31,9 +31,11 @@ type Store = Map Text Value
 
 -- | Errors that abort a transaction (and, with it, any state change).
 data TxError
-  = TypeError    String
-  | UnboundVar   String
+  = TypeError      String
+  | UnboundVar     String
   | RequireFailed
+  | UnknownTx      Text
+  | ArityMismatch  Text Int Int  -- ^ transaction name, expected, given
   deriving (Eq, Show)
 
 -- | The zero value of a type: @0@, @false@, the zero address, the empty map.
