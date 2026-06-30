@@ -18,9 +18,7 @@ import BlockChainLang.Eval
 import BlockChainLang.Syntax
 import BlockChainLang.Value
 
--- | Look up a transaction by name, bind its arguments and run it. Rejects an
--- unknown name, a wrong argument count, or an argument of the wrong type
--- before any state is touched.
+-- | Find the transaction, check arity and argument types, then run it.
 dispatch :: Contract -> Store -> Address -> Text -> [Value] -> Either TxError Store
 dispatch contract store sender name args = do
   txdef <- maybe (Left (UnknownTx name)) Right (findTx contract name)
@@ -42,8 +40,6 @@ buildParams ps args = Map.fromList <$> traverse checkOne (zip ps args)
       | otherwise =
           Left (TypeError ("argument `" ++ pname ++ "` expected " ++ show ty))
 
--- | Whether a runtime value inhabits a declared type. Map keys are not tracked
--- at runtime, so only the value type is compared for 'TMap'.
 matchesType :: Value -> Type -> Bool
 matchesType (VInt _)    TInt          = True
 matchesType (VBool _)   TBool         = True
@@ -51,16 +47,12 @@ matchesType (VAddr _)   TAddress      = True
 matchesType (VMap vt _) (TMap _ vt')  = vt == vt'
 matchesType _           _             = False
 
--- Static check ---------------------------------------------------------------
-
 data CheckError
-  = UndeclaredVar   String String  -- ^ transaction, variable
-  | BadAssignTarget String Expr    -- ^ transaction, target expression
+  = UndeclaredVar   String String
+  | BadAssignTarget String Expr
   deriving (Eq, Show)
 
--- | A light static check run once at deploy time: every variable referenced in
--- a transaction body must be a state variable or a parameter, and assignment
--- targets must be a variable or a map slot.
+-- | Every referenced variable must be in scope; assignment targets must be l-values.
 checkContract :: Contract -> Either CheckError ()
 checkContract (Contract svars txs) = mapM_ checkTx txs
   where

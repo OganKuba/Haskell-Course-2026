@@ -16,9 +16,7 @@ import Data.Text (Text)
 
 import BlockChainLang.Syntax
 
--- | A runtime value. 'VMap' carries its /value/ type so that a lookup of a
--- missing key can return the right default (this is what makes @balances[to]@
--- work for a fresh address).
+-- | 'VMap' carries its value type so a missing-key lookup can return a default.
 data Value
   = VInt  Integer
   | VBool Bool
@@ -26,19 +24,16 @@ data Value
   | VMap  Type (Map Value Value)
   deriving (Eq, Ord, Show)
 
--- | Contract state: state-variable names mapped to values.
 type Store = Map Text Value
 
--- | Errors that abort a transaction (and, with it, any state change).
 data TxError
   = TypeError      String
   | UnboundVar     String
   | RequireFailed
   | UnknownTx      Text
-  | ArityMismatch  Text Int Int  -- ^ transaction name, expected, given
+  | ArityMismatch  Text Int Int
   deriving (Eq, Show)
 
--- | The zero value of a type: @0@, @false@, the zero address, the empty map.
 defaultValue :: Type -> Value
 defaultValue TInt        = VInt 0
 defaultValue TBool       = VBool False
@@ -50,7 +45,6 @@ litValue (LInt n)  = VInt n
 litValue (LBool b) = VBool b
 litValue (LAddr t) = VAddr (Address t)
 
--- | Apply a binary operator, enforcing operand types.
 applyBinOp :: Op -> Value -> Value -> Either TxError Value
 applyBinOp op x y = case op of
   Add -> arith (+)

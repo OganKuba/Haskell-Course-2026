@@ -1,0 +1,13 @@
+contract SimpleCoin {
+  state {
+    balances: map<address, int> = empty;
+    owner:    address           = sender;
+  }
+
+  // move `amount` from the sender to `to`, if they can afford it
+  transaction transfer(to: address, amount: int) {
+    require balances[sender] >= amount;
+    balances[sender] := balances[sender] - amount;
+    balances[to]     := balances[to] + amount;
+  }
+}

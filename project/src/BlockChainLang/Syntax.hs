@@ -13,7 +13,6 @@ module BlockChainLang.Syntax
 
 import Data.Text (Text)
 
--- | Opaque account identifier.
 newtype Address = Address Text
   deriving (Eq, Ord, Show)
 
@@ -61,13 +60,13 @@ data Expr
   | Lit   Lit
   | BinOp Op Expr Expr
   | UnOp  Op Expr
-  | Index Expr Expr     -- ^ map indexing: @m[k]@
-  | Empty               -- ^ empty map literal
-  | Sender              -- ^ submitter of the current transaction
+  | Index Expr Expr
+  | Empty
+  | Sender
   deriving (Eq, Show)
 
 data Statement
-  = Assign  Expr Expr               -- ^ @lhs := rhs@
+  = Assign  Expr Expr
   | Require Expr
   | If      Expr [Statement] [Statement]
   deriving (Eq, Show)

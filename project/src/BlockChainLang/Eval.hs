@@ -1,12 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
--- | The transaction evaluator: the 'Eval' monad and expression evaluation.
---
--- The stack is @ReaderT EvalCtx (StateT Store (Either TxError))@. Read-only
--- context (the sender and the transaction parameters) lives in the 'ReaderT';
--- the mutable contract state lives in the 'StateT'; a 'Left' aborts the whole
--- transaction, so callers that discard the failed run keep the prior state
--- with no manual rollback.
+-- | The 'Eval' monad: expression evaluation, statement execution, transactions.
 module BlockChainLang.Eval
   ( EvalCtx (..)
   , Eval
@@ -28,22 +22,18 @@ import qualified Data.Text as T
 import BlockChainLang.Syntax
 import BlockChainLang.Value
 
--- | Read-only evaluation context.
 data EvalCtx = EvalCtx
   { ctxSender :: Address
   , ctxParams :: Map Text Value
   }
 
+-- | A 'Left' (e.g. a failed require) aborts and discards every state change.
 type Eval a = ReaderT EvalCtx (StateT Store (Either TxError)) a
 
--- | Run an evaluation, returning its result and the final store (or the error
--- that aborted it).
 runEval :: Address -> Map Text Value -> Store -> Eval a -> Either TxError (a, Store)
 runEval sender params store m =
   runStateT (runReaderT m (EvalCtx sender params)) store
 
--- | Evaluate a pure expression. 'Var' is looked up in the parameters first,
--- then in the store; a missing map key yields the value type's default.
 evalExpr :: Expr -> Eval Value
 evalExpr expr = case expr of
   Var x -> do
@@ -72,7 +62,6 @@ evalExpr expr = case expr of
     vb <- evalExpr b
     liftEither (applyBinOp op va vb)
 
--- | Execute a single statement, mutating the store.
 execStmt :: Statement -> Eval ()
 execStmt stmt = case stmt of
   Require e -> do
@@ -91,7 +80,7 @@ execStmt stmt = case stmt of
       VBool False -> mapM_ execStmt els
       _           -> throwError (TypeError "if condition expects a bool")
 
--- | Store a value at an l-value: either a plain variable or one map slot.
+-- | Store a value at an l-value: a plain variable or one map slot.
 assign :: Expr -> Value -> Eval ()
 assign (Var x) v = modify (Map.insert (T.pack x) v)
 assign (Index (Var m) keyExpr) v = do
@@ -103,21 +92,15 @@ assign (Index (Var m) keyExpr) v = do
     Nothing            -> throwError (UnboundVar m)
 assign lhs _ = throwError (TypeError ("cannot assign to " ++ show lhs))
 
--- | Run a transaction body against a store. The whole body runs in
--- @StateT Store (Either TxError)@, so a 'throwError' (e.g. a failed
--- 'Require') yields 'Left' and discards every change the body made — the
--- caller simply keeps the store it passed in. No manual rollback.
 runTransaction :: TransactionDef -> EvalCtx -> Store -> Either TxError Store
 runTransaction txdef ctx store =
   execStateT (runReaderT (mapM_ execStmt (txBody txdef)) ctx) store
 
--- | A bare @empty@ takes its type from the surrounding declaration.
 evalInit :: Type -> Expr -> Eval Value
 evalInit ty Empty = pure (defaultValue ty)
 evalInit _  e     = evalExpr e
 
--- | Deploy a contract: evaluate every state initialiser with @deployer@ as
--- @sender@. Earlier state variables are in scope for later ones.
+-- | Deploy: evaluate each state initialiser with the deployer as sender.
 initStore :: Contract -> Address -> Either TxError Store
 initStore (Contract svars _) deployer =
   execStateT (runReaderT (mapM_ initVar svars) ctx) Map.empty

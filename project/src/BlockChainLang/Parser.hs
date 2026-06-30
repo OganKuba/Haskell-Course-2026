@@ -4,6 +4,7 @@
 module BlockChainLang.Parser
   ( Parser
   , parseContract
+  , parseExpr
   , pContract
   , pStatement
   , pExpr
@@ -21,8 +22,6 @@ import qualified Text.Megaparsec.Char.Lexer as L
 import BlockChainLang.Syntax
 
 type Parser = Parsec Void Text
-
--- Lexer ----------------------------------------------------------------------
 
 sc :: Parser ()
 sc = L.space space1 (L.skipLineComment "//") (L.skipBlockComment "/*" "*/")
@@ -42,14 +41,13 @@ angles   = between (symbol "<") (symbol ">")
 keywords :: [Text]
 keywords =
   [ "contract", "state", "transaction", "require", "if", "else"
-  , "empty", "sender", "true", "false"
+  , "empty", "sender", "true", "false", "not"
   , "int", "bool", "address", "map"
   ]
 
 identChar :: Parser Char
 identChar = alphaNumChar <|> char '_'
 
--- | A keyword, ensuring it is not the prefix of a longer identifier.
 reserved :: Text -> Parser ()
 reserved kw = (lexeme . try) (string kw *> notFollowedBy identChar)
 
@@ -69,12 +67,9 @@ integer = lexeme L.decimal
 addrLit :: Parser Text
 addrLit = lexeme (char '@' *> (T.pack <$> some identChar))
 
--- Expressions ----------------------------------------------------------------
-
 pExpr :: Parser Expr
 pExpr = makeExprParser pTerm opTable
 
--- | A primary expression followed by zero or more @[..]@ index suffixes.
 pTerm :: Parser Expr
 pTerm = foldl Index <$> pPrimary <*> many (brackets pExpr)
 
@@ -105,8 +100,6 @@ opTable =
     binL name op = InfixL (BinOp op <$ symbol name)
     binN name op = InfixN (BinOp op <$ symbol name)
 
--- Types ----------------------------------------------------------------------
-
 pType :: Parser Type
 pType =
       TInt     <$ reserved "int"
@@ -117,8 +110,6 @@ pType =
     pMap = do
       reserved "map"
       angles (TMap <$> pType <* symbol "," <*> pType)
-
--- Statements -----------------------------------------------------------------
 
 pStatement :: Parser Statement
 pStatement = pRequire <|> pIf <|> pAssign
@@ -138,8 +129,6 @@ pStatement = pRequire <|> pIf <|> pAssign
       rhs <- pExpr
       _   <- symbol ";"
       pure (Assign lhs rhs)
-
--- Top level ------------------------------------------------------------------
 
 pStateVar :: Parser StateVar
 pStateVar = do
@@ -165,7 +154,7 @@ pTransaction = do
 pContract :: Parser Contract
 pContract = do
   reserved "contract"
-  _name <- identifier        -- contract name is not retained in the AST
+  _name <- identifier
   braces $ do
     st  <- reserved "state" *> braces (many pStateVar)
     txs <- many pTransaction
@@ -173,3 +162,6 @@ pContract = do
 
 parseContract :: Text -> Either (ParseErrorBundle Text Void) Contract
 parseContract = runParser (sc *> pContract <* eof) "<input>"
+
+parseExpr :: Text -> Either (ParseErrorBundle Text Void) Expr
+parseExpr = runParser (sc *> pExpr <* eof) "<expr>"

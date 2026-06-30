@@ -28,7 +28,28 @@ tests = testGroup "Eval"
       , testCase "comparisons" $ do
           run (binop Ge 5 3) @?= Right (VBool True)
           run (binop Lt 5 3) @?= Right (VBool False)
+          run (binop Le 3 3) @?= Right (VBool True)
+          run (binop Gt 5 3) @?= Right (VBool True)
           run (binop Eq 4 4) @?= Right (VBool True)
+          run (binop Neq 4 4) @?= Right (VBool False)
+
+      , testCase "boolean logic" $ do
+          run (BinOp And true false) @?= Right (VBool False)
+          run (BinOp Or true false)  @?= Right (VBool True)
+          run (UnOp Not false)       @?= Right (VBool True)
+
+      , testCase "sender evaluates to the context sender" $
+          run Sender @?= Right (VAddr (Address "alice"))
+
+      , testCase "a bare empty has no inferable type" $
+          case run Empty of
+            Left (TypeError _) -> pure ()
+            other -> assertFailure ("expected TypeError, got " ++ show other)
+
+      , testCase "indexing a non-map is an error" $
+          case run (Index (lit 1) (lit 0)) of
+            Left (TypeError _) -> pure ()
+            other -> assertFailure ("expected TypeError, got " ++ show other)
 
       , testCase "map lookup with a missing key returns the default" $
           runIn balances (Index (Var "balances") (addr "bob")) @?= Right (VInt 0)
@@ -57,8 +78,7 @@ tests = testGroup "Eval"
             @?= Right (Map.fromList [("x", VInt 5)])
 
       , testCase "a failed require rolls back earlier assignments" $
-          -- assigns x := 5, then aborts; the result is the error, not a
-          -- store with x == 5, so nothing committed.
+          -- x := 5 then abort: result is the error, not a store with x == 5
           runTransaction
             (txDef [Assign (Var "x") (lit 5), Require (Lit (LBool False))])
             ctx0 store0
@@ -72,6 +92,32 @@ tests = testGroup "Eval"
                       , (VAddr (Address "bob"),   VInt 30)
                       ]))
                   ])
+
+      , testCase "if takes the then-branch when the condition holds" $
+          runTransaction
+            (txDef [If (Lit (LBool True))
+                       [Assign (Var "x") (lit 1)]
+                       [Assign (Var "x") (lit 2)]])
+            ctx0 store0
+            @?= Right (Map.fromList [("x", VInt 1)])
+
+      , testCase "if takes the else-branch when the condition fails" $
+          runTransaction
+            (txDef [If (Lit (LBool False))
+                       [Assign (Var "x") (lit 1)]
+                       [Assign (Var "x") (lit 2)]])
+            ctx0 store0
+            @?= Right (Map.fromList [("x", VInt 2)])
+
+      , testCase "a non-boolean require is a type error" $
+          case runTransaction (txDef [Require (lit 1)]) ctx0 store0 of
+            Left (TypeError _) -> pure ()
+            other -> assertFailure ("expected TypeError, got " ++ show other)
+
+      , testCase "assigning to an unknown map variable is an error" $
+          runTransaction
+            (txDef [Assign (Index (Var "ghost") Sender) (lit 1)]) ctx0 store0
+            @?= Left (UnboundVar "ghost")
       ]
   ]
 
@@ -115,6 +161,10 @@ runIn store e = fst <$> runEval (Address "alice") Map.empty store (evalExpr e)
 
 lit :: Integer -> Expr
 lit = Lit . LInt
+
+true, false :: Expr
+true  = Lit (LBool True)
+false = Lit (LBool False)
 
 addr :: Text -> Expr
 addr = Lit . LAddr

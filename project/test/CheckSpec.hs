@@ -28,6 +28,10 @@ tests = testGroup "Check"
           dispatch coin store (Address "alice") "transfer" [VAddr (Address "bob")]
             @?= Left (ArityMismatch "transfer" 2 1)
 
+      , testCase "a zero-argument transaction with extra args is rejected" $
+          dispatch coin store (Address "alice") "noop" [VInt 1]
+            @?= Left (ArityMismatch "noop" 0 1)
+
       , testCase "wrong argument type is rejected" $
           case dispatch coin store (Address "alice") "transfer" [VInt 1, VInt 30] of
             Left (TypeError _) -> pure ()
@@ -45,6 +49,13 @@ tests = testGroup "Check"
 
       , testCase "an undeclared variable is reported" $
           checkContract badCoin @?= Left (UndeclaredVar "transfer" "blances")
+
+      , testCase "an undeclared variable inside an if is reported" $
+          checkContract (Contract [] [ifTx]) @?= Left (UndeclaredVar "t" "nope")
+
+      , testCase "a non-lvalue assignment target is reported" $
+          checkContract (Contract [] [badTargetTx])
+            @?= Left (BadAssignTarget "t" (Lit (LInt 1)))
       ]
   ]
 
@@ -53,7 +64,19 @@ tests = testGroup "Check"
 coin :: Contract
 coin = Contract
   [ StateVar "balances" (TMap TAddress TInt) Empty ]
-  [ transferDef (Index (Var "balances") Sender) ]
+  [ transferDef (Index (Var "balances") Sender)
+  , TransactionDef "noop" [] []
+  ]
+
+-- transaction t() { if (nope) { } else { } }  -- references an undeclared var
+ifTx :: TransactionDef
+ifTx = TransactionDef "t" []
+  [ If (Var "nope") [] [] ]
+
+-- transaction t() { 1 := 2; }  -- target is not an l-value
+badTargetTx :: TransactionDef
+badTargetTx = TransactionDef "t" []
+  [ Assign (Lit (LInt 1)) (Lit (LInt 2)) ]
 
 -- a copy whose transaction misspells `balances` as `blances`
 badCoin :: Contract

@@ -21,6 +21,8 @@ library
     BlockChainLang.Value
     BlockChainLang.Eval
     BlockChainLang.Check
+    BlockChainLang.Hash
+    BlockChainLang.Ledger
 
   build-depends:
     , base       >=4.14 && <5
@@ -39,6 +41,9 @@ test-suite blockchainlang-test
     ParserSpec
     EvalSpec
     CheckSpec
+    LedgerSpec
+    HashSpec
+    Props
   default-language: GHC2021
   build-depends:
     , base
